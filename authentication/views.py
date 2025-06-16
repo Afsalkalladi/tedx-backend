@@ -42,6 +42,31 @@ def register(request):
     return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
+@permission_classes([IsAdminUser])  # Only existing admins can create new admins
+def register_admin(request):
+    """
+    Create a new admin user. Only accessible by existing admins.
+    """
+    serializer = UserRegistrationSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        
+        # Set admin privileges - adjust based on your User model structure
+        user.is_staff = True
+        user.is_superuser = True
+        # If you have a custom role field, use:
+        user.role = 'admin'
+        user.save()
+        
+        tokens = get_tokens_for_user(user)
+        return Response({
+            'message': 'Admin user registered successfully',
+            'user': UserSerializer(user).data,
+            'tokens': tokens
+        }, status=status.HTTP_201_CREATED)
+    return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
     serializer = UserLoginSerializer(data=request.data)

@@ -9,4 +9,5 @@ urlpatterns = [
     path('profile/update/', views.update_profile, name='update_profile'),
     path('admin/dashboard/', views.admin_dashboard, name='admin_dashboard'),
     path('token/refresh/', views.refresh_token, name='token_refresh'),
+    path('register-admin/', views.register_admin, name='register_admin'),
 ]
