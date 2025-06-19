@@ -69,15 +69,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'auth_api.wsgi.application'
 
 # Database Configuration
-# Use SQLite for local development, PostgreSQL for production
+# Use SQLite for local development (DEBUG=True), PostgreSQL for production (DEBUG=False)
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-if DATABASE_URL:
-    # Production database (Render/Railway provides DATABASE_URL)
+if not DEBUG:
+    # Production database (PostgreSQL)
     import dj_database_url
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL)
     }
+    print("Using PostgreSQL database")
 else:
     # Local development with SQLite
     DATABASES = {
@@ -86,6 +87,7 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+    print("Using SQLite database")
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
