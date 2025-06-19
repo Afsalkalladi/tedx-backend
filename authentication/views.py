@@ -1,26 +1,22 @@
-from django.shortcuts import render
-
-# Create your views here.
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
-from google.auth.transport import requests
+from rest_framework_simplejwt.exceptions import TokenError
+from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from django.conf import settings
-from django.contrib.auth import get_user_model
+from .models import User
 from .serializers import (
     UserRegistrationSerializer, 
     UserLoginSerializer, 
-    UserSerializer,
-    GoogleLoginSerializer
+    GoogleAuthSerializer,
+    UserSerializer
 )
 from .permissions import IsAdminUser
 
-User = get_user_model()
-
 def get_tokens_for_user(user):
+    """Generate JWT tokens for a user"""
     refresh = RefreshToken.for_user(user)
     return {
         'refresh': str(refresh),
@@ -28,47 +24,24 @@ def get_tokens_for_user(user):
     }
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([permissions.AllowAny])
 def register(request):
+    """Register a new user with email and password"""
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
         tokens = get_tokens_for_user(user)
         return Response({
-            'message': 'User registered successfully',
+            'message': 'User created successfully',
             'user': UserSerializer(user).data,
             'tokens': tokens
         }, status=status.HTTP_201_CREATED)
-    return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])  # Only existing admins can create new admins
-def register_admin(request):
-    """
-    Create a new admin user. Only accessible by existing admins.
-    """
-    serializer = UserRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        
-        # Set admin privileges - adjust based on your User model structure
-        user.is_staff = True
-        user.is_superuser = True
-        # If you have a custom role field, use:
-        user.role = 'admin'
-        user.save()
-        
-        tokens = get_tokens_for_user(user)
-        return Response({
-            'message': 'Admin user registered successfully',
-            'user': UserSerializer(user).data,
-            'tokens': tokens
-        }, status=status.HTTP_201_CREATED)
-    return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([permissions.AllowAny])
 def login(request):
+    """Login with email and password"""
     serializer = UserLoginSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.validated_data['user']
@@ -78,101 +51,146 @@ def login(request):
             'user': UserSerializer(user).data,
             'tokens': tokens
         }, status=status.HTTP_200_OK)
-    return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
-def google_login(request):
-    serializer = GoogleLoginSerializer(data=request.data)
+@permission_classes([permissions.AllowAny])
+def google_auth(request):
+    """Authenticate with Google OAuth"""
+    serializer = GoogleAuthSerializer(data=request.data)
     if not serializer.is_valid():
-        return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-    
-    token = serializer.validated_data['token']
-    
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    google_token = serializer.validated_data['google_token']
     try:
-        # Verify the token with Google
         idinfo = id_token.verify_oauth2_token(
-            token, requests.Request(), settings.GOOGLE_CLIENT_ID
+            google_token, 
+            google_requests.Request(), 
+            settings.GOOGLE_CLIENT_ID
+        )
+        email = idinfo['email']
+        google_id_val = idinfo['sub']
+        name = idinfo.get('name', '')
+        name_parts = name.split(' ') if name else ['']
+        first_name = name_parts[0]
+        last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                'username': email,
+                'google_id': google_id_val,
+                'is_google_user': True,
+                'first_name': first_name,
+                'last_name': last_name
+            }
         )
         
-        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-            raise ValueError('Wrong issuer.')
-        
-        # Get user info from Google
-        email = idinfo['email']
-        first_name = idinfo.get('given_name', '')
-        last_name = idinfo.get('family_name', '')
-        
-        # Check if user exists
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            # Create new user
-            username = email.split('@')[0]
-            # Ensure unique username
-            counter = 1
-            original_username = username
-            while User.objects.filter(username=username).exists():
-                username = f"{original_username}{counter}"
-                counter += 1
-            
-            user = User.objects.create_user(
-                email=email,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-                is_google_user=True
-            )
-        
+        # Always update profile on login for Google users
+        if not created:
+            user.google_id = google_id_val
+            user.is_google_user = True
+            # Update name on login
+            user.first_name = first_name
+            user.last_name = last_name
+            user.save()
+
         tokens = get_tokens_for_user(user)
         return Response({
-            'message': 'Google login successful',
+            'message': 'Google authentication successful',
             'user': UserSerializer(user).data,
             'tokens': tokens
         }, status=status.HTTP_200_OK)
-        
     except ValueError as e:
-        return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Invalid Google token: {str(e)}'}, 
+                       status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated])
 def profile(request):
+    """Get user profile information"""
     serializer = UserSerializer(request.user)
-    return Response({'user': serializer.data})
-
-@api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def update_profile(request):
-    serializer = UserSerializer(request.user, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response({
-            'message': 'Profile updated successfully',
-            'user': serializer.data
-        })
-    return Response({'errors': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(serializer.data)
 
 @api_view(['GET'])
 @permission_classes([IsAdminUser])
-def admin_dashboard(request):
-    users = User.objects.all()
+def admin_only(request):
+    """Endpoint accessible only to admin users"""
     return Response({
-        'message': 'Welcome to admin dashboard',
-        'total_users': users.count(),
-        'users': UserSerializer(users, many=True).data
+        'message': 'Admin access granted',
+        'admin_data': 'This is sensitive admin data'
     })
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def refresh_token(request):
-    refresh_token = request.data.get('refresh')
-    if not refresh_token:
+    """Refresh an expired access token"""
+    refresh_token_val = request.data.get('refresh')
+    if not refresh_token_val:
         return Response({'error': 'Refresh token required'}, status=status.HTTP_400_BAD_REQUEST)
-    
     try:
-        refresh = RefreshToken(refresh_token)
+        refresh = RefreshToken(refresh_token_val)
+        access_token = str(refresh.access_token)
+        return Response({'access': access_token})
+    except (ValueError, TokenError) as e:
+        return Response({'error': f'Invalid refresh token: {str(e)}'}, 
+                        status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def user_list(request):
+    """Get all user accounts (admin only) with optional filtering by role"""
+    # Get query parameters
+    role = request.query_params.get('role', None)
+    page = int(request.query_params.get('page', 1))
+    page_size = int(request.query_params.get('page_size', 10))
+    
+    # Filter users
+    users = User.objects.all().order_by('-created_at')
+    if role:
+        if role.lower() in [User.ADMIN.lower(), User.USER.lower()]:
+            users = users.filter(role=role.lower())
+        else:
+            return Response({
+                'error': f"Invalid role filter. Valid values are '{User.ADMIN}' or '{User.USER}'."
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Calculate pagination values
+    total = users.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    users = users[start:end]
+    
+    # Serialize users
+    serializer = UserSerializer(users, many=True)
+    
+    return Response({
+        'count': total,
+        'pages': (total + page_size - 1) // page_size,
+        'current_page': page,
+        'page_size': page_size,
+        'users': serializer.data
+    }, status=status.HTTP_200_OK)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def create_first_admin(request):
+    """Create the first admin user (only works if no admins exist)"""
+    if User.objects.filter(role=User.ADMIN).exists():
+        return Response({'error': 'Admin already exists'}, status=status.HTTP_403_FORBIDDEN)
+        
+    serializer = UserRegistrationSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        user.role = User.ADMIN
+        user.is_staff = True
+        user.is_superuser = True
+        user.save()
+        
+        tokens = get_tokens_for_user(user)
         return Response({
-            'access': str(refresh.access_token),
-        })
-    except Exception as e:
-        return Response({'error': 'Invalid refresh token'}, status=status.HTTP_400_BAD_REQUEST)
+            'message': 'Admin created successfully',
+            'user': UserSerializer(user).data,
+            'tokens': tokens
+        }, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

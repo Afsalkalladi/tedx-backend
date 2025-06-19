@@ -1,26 +1,30 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
-class CustomUser(AbstractUser):
+class User(AbstractUser):
+    # Role constants for better code readability and consistency
+    USER = 'user'
+    ADMIN = 'admin'
+    
     ROLE_CHOICES = [
-        ('user', 'User'),
-        ('admin', 'Admin'),
+        (USER, 'User'),
+        (ADMIN, 'Admin'),
     ]
     
     email = models.EmailField(unique=True)
-    first_name = models.CharField(max_length=30)
-    last_name = models.CharField(max_length=30)
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default=USER)
     is_google_user = models.BooleanField(default=False)
+    google_id = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+    REQUIRED_FIELDS = ['username']
     
     def __str__(self):
         return self.email
     
     @property
     def is_admin(self):
-        return self.role == 'admin'
+        """Convenient property to check if user is an admin"""
+        return self.role == self.ADMIN
