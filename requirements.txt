@@ -21,6 +21,7 @@ httplib2==0.22.0
 idna==3.10
 oauthlib==3.2.2
 packaging==25.0
+psycopg2-binary==2.9.9
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.22
@@ -31,7 +32,6 @@ python-decouple==3.8
 python-dotenv==1.0.1
 python3-openid==3.2.0
 pytz==2025.2
-psycopg2-binary==2.9.9
 requests==2.32.4
 requests-oauthlib==2.0.0
 rsa==4.9.1
@@ -41,5 +41,3 @@ typing_extensions==4.14.0
 urllib3==2.4.0
 wheel==0.43.0
 whitenoise==6.6.0
-psycopg2-binary==2.9.9  
-
