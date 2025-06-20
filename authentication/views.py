@@ -11,9 +11,10 @@ from .serializers import (
     UserRegistrationSerializer, 
     UserLoginSerializer, 
     GoogleAuthSerializer,
-    UserSerializer
+    UserSerializer,
+    RoleChangeSerializer
 )
-from .permissions import IsAdminUser
+from .permissions import IsSuperuser, IsStaffOrAbove
 
 def get_tokens_for_user(user):
     """Generate JWT tokens for a user"""
@@ -82,7 +83,10 @@ def google_auth(request):
                 'google_id': google_id_val,
                 'is_google_user': True,
                 'first_name': first_name,
-                'last_name': last_name
+                'last_name': last_name,
+                # Security: Ensure Google auth cannot create privileged users
+                'is_superuser': False,
+                'is_staff': False
             }
         )
         
@@ -90,7 +94,6 @@ def google_auth(request):
         if not created:
             user.google_id = google_id_val
             user.is_google_user = True
-            # Update name on login
             user.first_name = first_name
             user.last_name = last_name
             user.save()
@@ -112,15 +115,6 @@ def profile(request):
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
 
-@api_view(['GET'])
-@permission_classes([IsAdminUser])
-def admin_only(request):
-    """Endpoint accessible only to admin users"""
-    return Response({
-        'message': 'Admin access granted',
-        'admin_data': 'This is sensitive admin data'
-    })
-
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def refresh_token(request):
@@ -137,60 +131,70 @@ def refresh_token(request):
                         status=status.HTTP_401_UNAUTHORIZED)
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsStaffOrAbove])
 def user_list(request):
-    """Get all user accounts (admin only) with optional filtering by role"""
-    # Get query parameters
-    role = request.query_params.get('role', None)
-    page = int(request.query_params.get('page', 1))
-    page_size = int(request.query_params.get('page_size', 10))
-    
-    # Filter users
+    """Get all user accounts (staff and superuser only)"""
     users = User.objects.all().order_by('-created_at')
-    if role:
-        if role.lower() in [User.ADMIN.lower(), User.USER.lower()]:
-            users = users.filter(role=role.lower())
-        else:
-            return Response({
-                'error': f"Invalid role filter. Valid values are '{User.ADMIN}' or '{User.USER}'."
-            }, status=status.HTTP_400_BAD_REQUEST)
-    
-    # Calculate pagination values
-    total = users.count()
-    start = (page - 1) * page_size
-    end = start + page_size
-    users = users[start:end]
-    
-    # Serialize users
     serializer = UserSerializer(users, many=True)
-    
     return Response({
-        'count': total,
-        'pages': (total + page_size - 1) // page_size,
-        'current_page': page,
-        'page_size': page_size,
+        'count': users.count(),
         'users': serializer.data
     }, status=status.HTTP_200_OK)
 
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def create_first_admin(request):
-    """Create the first admin user (only works if no admins exist)"""
-    if User.objects.filter(role=User.ADMIN).exists():
-        return Response({'error': 'Admin already exists'}, status=status.HTTP_403_FORBIDDEN)
-        
-    serializer = UserRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        user.role = User.ADMIN
-        user.is_staff = True
-        user.is_superuser = True
-        user.save()
-        
-        tokens = get_tokens_for_user(user)
+@api_view(['PATCH'])
+@permission_classes([IsSuperuser])
+def change_user_role(request, user_id):
+    """Change user role - superuser only"""
+    try:
+        target_user = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    # Prevent users from changing their own role
+    if target_user == request.user:
+        return Response({'error': 'You cannot change your own role'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Prevent changing superuser roles
+    if target_user.is_superuser:
         return Response({
-            'message': 'Admin created successfully',
-            'user': UserSerializer(user).data,
-            'tokens': tokens
-        }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            'error': 'Cannot modify superuser roles'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    serializer = RoleChangeSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    role = serializer.validated_data['role']
+    
+    if role == 'staff':
+        target_user.is_staff = True
+        message = f'User {target_user.email} promoted to staff'
+    else:  # role == 'user'
+        target_user.is_staff = False
+        message = f'User {target_user.email} changed to regular user'
+    
+    target_user.save()
+    
+    return Response({
+        'message': message,
+        'user': UserSerializer(target_user).data
+    }, status=status.HTTP_200_OK)
+
+@api_view(['GET'])
+@permission_classes([IsStaffOrAbove])
+def staff_only(request):
+    """Endpoint accessible to staff and superusers"""
+    return Response({
+        'message': 'Staff access granted',
+        'user_type': request.user.user_type,
+        'data': 'This data is accessible to staff and above'
+    })
+
+@api_view(['GET'])
+@permission_classes([IsSuperuser])
+def admin_only(request):
+    """Endpoint accessible only to superusers"""
+    return Response({
+        'message': 'Admin access granted',
+        'data': 'This is superuser-only data'
+    })
