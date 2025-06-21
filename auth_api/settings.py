@@ -97,12 +97,12 @@ if DATABASE_URL and not DEBUG:
     DATABASES = {
         'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
-    # Optimize PostgreSQL connection
+    # Optimize PostgreSQL connection for Render
     DATABASES['default'].update({
         'ATOMIC_REQUESTS': True,
         'CONN_MAX_AGE': 600,
         'OPTIONS': {
-            'MAX_CONNS': 20,
+            'sslmode': 'require',
         }
     })
     print("Using PostgreSQL database")
