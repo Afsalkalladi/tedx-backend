@@ -15,9 +15,5 @@ pip install -r requirements.txt
 echo "📂 Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Check if migrations are needed
-echo "🔄 Checking migrations..."
-python manage.py showmigrations
-
 echo "✅ Build process completed successfully!"
 echo "🚀 Ready for deployment!"
