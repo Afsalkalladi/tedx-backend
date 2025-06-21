@@ -153,10 +153,19 @@ python manage.py test authentication.test
 
 ```
 tedx-backend/
-├── auth_api/               # Project settings and URLs
-├── authentication/         # Core app: models, views, tests, etc.
-├── requirements.txt        # Dependencies
-├── .env            # Env config
+├── auth_api/                          # Django project configuration
+│   ├── settings.py                    # Main settings
+│   └── urls.py                        # URL routing
+├── authentication/                    # Authentication app
+│   ├── models.py                      # User models
+│   ├── views.py                       # API endpoints
+│   ├── serializers.py                # Data serializers
+│   ├── permissions.py                # Access control
+│   ├── urls.py                        # App URLs
+│   └── migrations/                    # Database migrations
+├── manage.py                          # Django CLI
+├── requirements.txt                   # Dependencies
+└── README.md                          # Documentation
 ```
 
 ---
@@ -190,7 +199,6 @@ admin_password=tedx@123
 
 ---
 
-**Live Demo**: [https://tedx-backend-6qlj.onrender.com]
 **Health Check**: [https://tedx-backend-6qlj.onrender.com/health/]
 
 ```
