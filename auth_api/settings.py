@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import timedelta
+import sys
 
 # Load environment variables
 load_dotenv()
@@ -14,6 +15,24 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key-for-dev')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+
+# 🔒 SUPERUSER CREATION PROTECTION
+if 'createsuperuser' in sys.argv:
+    if not DEBUG:
+        # Production protection - require special key
+        protection_key = os.getenv('SUPERUSER_CREATION_KEY')
+        expected_key = 'TEDx_SuperUser_Production_Key_2025'
+        
+        if protection_key != expected_key:
+            print("🚨 SECURITY ALERT: Superuser creation blocked in production!")
+            print("🔑 Missing or invalid SUPERUSER_CREATION_KEY")
+            print("📧 Contact system administrator for authorization")
+            print("💡 For development, set DEBUG=True")
+            sys.exit(1)
+        else:
+            print("⚠️  WARNING: Creating superuser in production with valid authorization key")
+    else:
+        print("ℹ️  Creating superuser in development mode")
 
 # Define allowed hosts based on environment
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
@@ -72,12 +91,20 @@ WSGI_APPLICATION = 'auth_api.wsgi.application'
 # Use SQLite for local development (DEBUG=True), PostgreSQL for production (DEBUG=False)
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-if not DEBUG:
+if DATABASE_URL and not DEBUG:
     # Production database (PostgreSQL)
     import dj_database_url
     DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL)
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
+    # Optimize PostgreSQL connection
+    DATABASES['default'].update({
+        'ATOMIC_REQUESTS': True,
+        'CONN_MAX_AGE': 600,
+        'OPTIONS': {
+            'MAX_CONNS': 20,
+        }
+    })
     print("Using PostgreSQL database")
 else:
     # Local development with SQLite
@@ -175,6 +202,47 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = 'DENY'
+    
+    # Referrer policy
+    SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple' if DEBUG else 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'authentication': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}
 
 # Add these for Render deployment:
 

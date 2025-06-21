@@ -27,6 +27,9 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data.pop('password_confirm')
+        # Security: Ensure no superuser or staff privileges can be set during registration
+        validated_data.pop('is_superuser', None)
+        validated_data.pop('is_staff', None)
         user = User.objects.create_user(**validated_data)
         return user
 
@@ -54,8 +57,14 @@ class GoogleAuthSerializer(serializers.Serializer):
     google_token = serializers.CharField(required=True)
 
 class UserSerializer(serializers.ModelSerializer):
+    user_type = serializers.ReadOnlyField()
+    
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'role', 'is_google_user', 'first_name', 
-                  'last_name', 'created_at', 'updated_at')
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        fields = ('id', 'username', 'email', 'user_type', 'is_google_user', 'first_name', 
+                  'last_name', 'is_superuser', 'is_staff', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'user_type', 'created_at', 'updated_at')
+
+class RoleChangeSerializer(serializers.Serializer):
+    """Serializer for superuser role management"""
+    role = serializers.ChoiceField(choices=['staff', 'user'], required=True)

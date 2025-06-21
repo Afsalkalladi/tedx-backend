@@ -1,43 +1,27 @@
-asgiref==3.8.1
-cachetools==5.5.2
-certifi==2025.6.15
-cffi==1.17.1
-charset-normalizer==3.4.2
-cryptography==45.0.4
-defusedxml==0.7.1
-dj-database-url==2.1.0
-dj-rest-auth==5.0.2
+# Core Django dependencies
 Django==5.2.3
-django-allauth==0.57.0
-django-cors-headers==4.3.1
-django-extensions==4.1
 djangorestframework==3.15.1
 djangorestframework-simplejwt==5.3.1
-google-auth==2.29.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
-gunicorn==21.2.0
-httplib2==0.22.0
-idna==3.10
-oauthlib==3.2.2
-packaging==25.0
+
+# Database
+dj-database-url==2.1.0
 psycopg[binary]==3.2.9
-pyasn1==0.6.1
-pyasn1_modules==0.4.2
-pycparser==2.22
-PyJWT==2.9.0
-pyOpenSSL==25.1.0
-pyparsing==3.2.3
-python-decouple==3.8
-python-dotenv==1.0.1
-python3-openid==3.2.0
-pytz==2025.2
-requests==2.32.4
-requests-oauthlib==2.0.0
-rsa==4.9.1
-setuptools==69.5.1
-sqlparse==0.5.3
-typing_extensions==4.14.0
-urllib3==2.4.0
-wheel==0.43.0
+
+# Production server
+gunicorn==21.2.0
+
+# Static files and CORS
 whitenoise==6.6.0
+django-cors-headers==4.3.1
+
+# Environment variables
+python-dotenv==1.0.1
+
+# Google OAuth
+google-auth==2.29.0
+requests==2.32.4
+
+# Essential Python dependencies (auto-installed but pinned for stability)
+asgiref==3.8.1
+sqlparse==0.5.3
+pytz==2025.2

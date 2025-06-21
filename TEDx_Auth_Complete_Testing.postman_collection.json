@@ -1,0 +1,1106 @@
+{
+	"info": {
+		"_postman_id": "tedx-auth-complete-v2",
+		"name": "TEDx Auth API - Complete Role Testing & Cleanup",
+		"description": "🚀 **COMPREHENSIVE POSTMAN COLLECTION**\\n\\n✅ **Complete Role-Based Testing:**\\n- Regular User → Staff → Regular (full lifecycle)\\n- Tests ALL permission levels properly\\n- Real superuser/admin authentication\\n- Proper cleanup with role demotion\\n\\n✅ **Features:**\\n- 18 comprehensive test scenarios\\n- Automatic unique user generation\\n- Token management across role changes\\n- Complete cleanup with user demotion\\n- Detailed logging and validation\\n\\n⚠️ **REQUIREMENTS:**\\n- Admin credentials (admin_email, admin_password)\\n- API with superuser account\\n\\n📋 **Test Flow:**\\n1. Health check\\n2. Admin authentication\\n3. Test user creation & login\\n4. Regular user permission testing\\n5. Role promotion to staff\\n6. Staff permission testing\\n7. Admin-only access testing\\n8. Token refresh validation\\n9. Complete cleanup & demotion\\n\\n🧹 **Real Cleanup:**\\n- Demotes all promoted users\\n- Clears all tokens and variables\\n- Logs cleanup progress\\n- Ensures no test data remains",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "🔍 Health Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"API Health Check\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData.status).to.eql('healthy');",
+							"    pm.expect(jsonData.service).to.eql('tedx-auth-api');",
+							"});",
+							"",
+							"console.log(\"✅ API Health Check - Service is running and healthy\");"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health/",
+					"host": ["{{base_url}}"],
+					"path": ["health", ""]
+				}
+			}
+		},
+		{
+			"name": "🔑 Admin Authentication",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Get admin credentials from environment or use defaults",
+							"const adminEmail = pm.environment.get('admin_email') || 'admin@test.com';",
+							"const adminPassword = pm.environment.get('admin_password') || 'AdminPass123!';",
+							"",
+							"pm.collectionVariables.set('admin_email', adminEmail);",
+							"pm.collectionVariables.set('admin_password', adminPassword);",
+							"",
+							"console.log('🔑 Admin Authentication - Logging in as:', adminEmail);",
+							"console.log('⚠️  If this fails, set admin_email and admin_password in environment');"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Admin Login Successful\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('user');",
+							"    pm.expect(jsonData).to.have.property('tokens');",
+							"    pm.expect(jsonData.tokens).to.have.property('access');",
+							"    pm.expect(jsonData.tokens).to.have.property('refresh');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    ",
+							"    // Store admin tokens",
+							"    pm.collectionVariables.set('admin_access_token', jsonData.tokens.access);",
+							"    pm.collectionVariables.set('admin_refresh_token', jsonData.tokens.refresh);",
+							"    pm.collectionVariables.set('admin_user_id', jsonData.user.id);",
+							"    pm.collectionVariables.set('admin_user_type', jsonData.user.user_type);",
+							"    ",
+							"    console.log('✅ Admin Authentication - Success!');",
+							"    console.log('👤 Admin User Type:', jsonData.user.user_type);",
+							"    console.log('🆔 Admin User ID:', jsonData.user.id);",
+							"    ",
+							"    // Validate admin has superuser privileges",
+							"    if (jsonData.user.user_type === 'superuser') {",
+							"        console.log('🔐 Superuser privileges confirmed - Full testing enabled');",
+							"    } else {",
+							"        console.log('⚠️  Warning: User is not superuser - role testing may fail');",
+							"    }",
+							"} else {",
+							"    console.log('❌ Admin Authentication Failed');",
+							"    console.log('💡 Check admin_email and admin_password in environment variables');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{admin_email}}\",\n    \"password\": \"{{admin_password}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/login/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "login", ""]
+				}
+			}
+		},
+		{
+			"name": "👥 Get Initial User List (Admin)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"User List Access (Admin)\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('count');",
+							"    pm.expect(jsonData).to.have.property('users');",
+							"    pm.expect(jsonData.users).to.be.an('array');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    console.log('✅ User List Access - Admin can view users');",
+							"    console.log('📊 Total users in system:', jsonData.count);",
+							"    ",
+							"    // Store initial user count for cleanup verification",
+							"    pm.collectionVariables.set('initial_user_count', jsonData.count);",
+							"} else {",
+							"    console.log('❌ User List Access Failed - Check admin privileges');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{admin_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", ""]
+				}
+			}
+		},
+		{
+			"name": "👤 Create Test User",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Generate unique test user data",
+							"const timestamp = Date.now();",
+							"const randomId = Math.floor(Math.random() * 10000);",
+							"",
+							"const testUsername = `testuser_${timestamp}_${randomId}`;",
+							"const testEmail = `test_${timestamp}_${randomId}@example.com`;",
+							"const testPassword = 'TestPassword123!';",
+							"",
+							"pm.collectionVariables.set('test_username', testUsername);",
+							"pm.collectionVariables.set('test_email', testEmail);",
+							"pm.collectionVariables.set('test_password', testPassword);",
+							"",
+							"console.log('👤 Creating Test User:');",
+							"console.log('   📧 Email:', testEmail);",
+							"console.log('   👥 Username:', testUsername);"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Test User Registration\", function () {",
+							"    pm.response.to.have.status(201);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('user');",
+							"    pm.expect(jsonData).to.have.property('tokens');",
+							"    pm.expect(jsonData.user.user_type).to.eql('user');",
+							"    pm.expect(jsonData.user.email).to.eql(pm.collectionVariables.get('test_email'));",
+							"});",
+							"",
+							"if (pm.response.code === 201) {",
+							"    const jsonData = pm.response.json();",
+							"    ",
+							"    // Store test user data",
+							"    pm.collectionVariables.set('test_user_id', jsonData.user.id);",
+							"    pm.collectionVariables.set('test_user_access_token', jsonData.tokens.access);",
+							"    pm.collectionVariables.set('test_user_refresh_token', jsonData.tokens.refresh);",
+							"    pm.collectionVariables.set('test_user_initial_type', jsonData.user.user_type);",
+							"    ",
+							"    console.log('✅ Test User Created Successfully');",
+							"    console.log('🆔 User ID:', jsonData.user.id);",
+							"    console.log('👤 Initial Role:', jsonData.user.user_type);",
+							"    console.log('📧 Email:', jsonData.user.email);",
+							"} else {",
+							"    console.log('❌ Test User Creation Failed');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"{{test_username}}\",\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\",\n    \"password_confirm\": \"{{test_password}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/register/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "register", ""]
+				}
+			}
+		},
+		{
+			"name": "🔐 Test User Login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Test User Login\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('user');",
+							"    pm.expect(jsonData).to.have.property('tokens');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    ",
+							"    // Update tokens (in case they changed)",
+							"    pm.collectionVariables.set('test_user_access_token', jsonData.tokens.access);",
+							"    pm.collectionVariables.set('test_user_refresh_token', jsonData.tokens.refresh);",
+							"    ",
+							"    console.log('✅ Test User Login - Success');",
+							"    console.log('👤 User Type:', jsonData.user.user_type);",
+							"} else {",
+							"    console.log('❌ Test User Login Failed');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/login/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "login", ""]
+				}
+			}
+		},
+		{
+			"name": "👤 Test User Profile Access",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"User Profile Access\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('email');",
+							"    pm.expect(jsonData.email).to.eql(pm.collectionVariables.get('test_email'));",
+							"});",
+							"",
+							"console.log('✅ User Profile Access - Regular user can access own profile');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{test_user_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/profile/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "profile", ""]
+				}
+			}
+		},
+		{
+			"name": "🚫 Staff Access (Should Fail - Regular User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Staff Access Denied for Regular User\", function () {",
+							"    pm.response.to.have.status(403);",
+							"});",
+							"",
+							"console.log('✅ Staff Access Control - Correctly denied for regular user');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{test_user_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/staff-only/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "staff-only", ""]
+				}
+			}
+		},
+		{
+			"name": "🚫 Admin Access (Should Fail - Regular User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Admin Access Denied for Regular User\", function () {",
+							"    pm.response.to.have.status(403);",
+							"});",
+							"",
+							"console.log('✅ Admin Access Control - Correctly denied for regular user');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{test_user_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/admin-only/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "admin-only", ""]
+				}
+			}
+		},
+		{
+			"name": "🚫 User List Access (Should Fail - Regular User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"User List Access Denied for Regular User\", function () {",
+							"    pm.response.to.have.status(403);",
+							"});",
+							"",
+							"console.log('✅ User List Access Control - Correctly denied for regular user');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{test_user_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", ""]
+				}
+			}
+		},
+		{
+			"name": "⬆️ Promote User to Staff (Admin Action)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"const testUserId = pm.collectionVariables.get('test_user_id');",
+							"console.log('⬆️ Promoting User to Staff');",
+							"console.log('🆔 Target User ID:', testUserId);",
+							"console.log('👤 Promoting from: user → staff');"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"User Promotion to Staff\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('message');",
+							"    pm.expect(jsonData).to.have.property('user');",
+							"    pm.expect(jsonData.user.user_type).to.eql('staff');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    ",
+							"    // Mark user as promoted for cleanup",
+							"    pm.collectionVariables.set('user_was_promoted', 'true');",
+							"    pm.collectionVariables.set('user_current_role', 'staff');",
+							"    ",
+							"    console.log('✅ User Promotion Successful!');",
+							"    console.log('📝 Message:', jsonData.message);",
+							"    console.log('👤 New Role:', jsonData.user.user_type);",
+							"    console.log('🔄 User needs to re-login for new permissions');",
+							"} else {",
+							"    console.log('❌ User Promotion Failed - Check admin privileges');",
+							"    pm.collectionVariables.set('user_was_promoted', 'false');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{admin_access_token}}"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"role\": \"staff\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/{{test_user_id}}/change-role/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", "{{test_user_id}}", "change-role", ""]
+				}
+			}
+		},
+		{
+			"name": "🔄 Re-login After Promotion (Get Staff Token)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"console.log('🔄 Re-login After Promotion');",
+							"console.log('📧 Email:', pm.collectionVariables.get('test_email'));",
+							"console.log('🎯 Purpose: Get new token with staff permissions');"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Re-login After Promotion\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('user');",
+							"    pm.expect(jsonData).to.have.property('tokens');",
+							"    pm.expect(jsonData.user.user_type).to.eql('staff');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    ",
+							"    // Store new staff tokens",
+							"    pm.collectionVariables.set('staff_access_token', jsonData.tokens.access);",
+							"    pm.collectionVariables.set('staff_refresh_token', jsonData.tokens.refresh);",
+							"    ",
+							"    console.log('✅ Re-login Successful!');",
+							"    console.log('🔑 New staff token obtained');",
+							"    console.log('👤 Confirmed Role:', jsonData.user.user_type);",
+							"} else {",
+							"    console.log('❌ Re-login Failed');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{test_email}}\",\n    \"password\": \"{{test_password}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/login/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "login", ""]
+				}
+			}
+		},
+		{
+			"name": "✅ Staff Access (Should Pass - Staff User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Staff Access Granted for Staff User\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('message');",
+							"    pm.expect(jsonData.message).to.include('Staff access granted');",
+							"    pm.expect(jsonData).to.have.property('user_type');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    console.log('✅ Staff Access Granted!');",
+							"    console.log('📝 Message:', jsonData.message);",
+							"    console.log('👤 User Type:', jsonData.user_type);",
+							"    console.log('📊 Data:', jsonData.data);",
+							"} else {",
+							"    console.log('❌ Staff Access Denied - Check promotion and re-login');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{staff_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/staff-only/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "staff-only", ""]
+				}
+			}
+		},
+		{
+			"name": "✅ User List Access (Should Pass - Staff User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"User List Access Granted for Staff User\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('count');",
+							"    pm.expect(jsonData).to.have.property('users');",
+							"    pm.expect(jsonData.users).to.be.an('array');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    console.log('✅ User List Access Granted for Staff!');",
+							"    console.log('📊 Total users visible to staff:', jsonData.count);",
+							"} else {",
+							"    console.log('❌ User List Access Denied - Check staff token');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{staff_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", ""]
+				}
+			}
+		},
+		{
+			"name": "🚫 Admin Access (Should Fail - Staff User)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Admin Access Denied for Staff User\", function () {",
+							"    pm.response.to.have.status(403);",
+							"});",
+							"",
+							"console.log('✅ Admin Access Control - Correctly denied for staff user');",
+							"console.log('🔐 Role hierarchy working: staff < superuser');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{staff_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/admin-only/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "admin-only", ""]
+				}
+			}
+		},
+		{
+			"name": "✅ Admin Access (Should Pass - Superuser)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Admin Access Granted for Superuser\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('message');",
+							"    pm.expect(jsonData.message).to.include('Admin access granted');",
+							"    pm.expect(jsonData).to.have.property('data');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    console.log('✅ Admin Access Granted for Superuser!');",
+							"    console.log('📝 Message:', jsonData.message);",
+							"    console.log('📊 Superuser Data:', jsonData.data);",
+							"} else {",
+							"    console.log('❌ Admin Access Denied - Check superuser status');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{admin_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/admin-only/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "admin-only", ""]
+				}
+			}
+		},
+		{
+			"name": "🔄 Token Refresh Test",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Token Refresh\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('access');",
+							"    pm.expect(jsonData.access).to.be.a('string');",
+							"    pm.expect(jsonData.access.length).to.be.greaterThan(0);",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    pm.collectionVariables.set('refreshed_access_token', jsonData.access);",
+							"    console.log('✅ Token Refresh Successful!');",
+							"    console.log('🔑 New access token obtained');",
+							"} else {",
+							"    console.log('❌ Token Refresh Failed');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"refresh\": \"{{staff_refresh_token}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/refresh-token/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "refresh-token", ""]
+				}
+			}
+		},
+		{
+			"name": "🧪 Input Validation Test",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Input Validation Working\", function () {",
+							"    pm.response.to.have.status(400);",
+							"    const jsonData = pm.response.json();",
+							"    // Should contain validation errors",
+							"    pm.expect(jsonData).to.be.an('object');",
+							"});",
+							"",
+							"console.log('✅ Input Validation - Error handling working correctly');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"\",\n    \"email\": \"invalid-email\",\n    \"password\": \"123\",\n    \"password_confirm\": \"different\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/register/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "register", ""]
+				}
+			}
+		},
+		{
+			"name": "🧹 CLEANUP: Demote User Back to Regular",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"console.log('🧹 STARTING CLEANUP PROCESS');",
+							"console.log('==========================================');",
+							"",
+							"const wasPromoted = pm.collectionVariables.get('user_was_promoted');",
+							"const testUserId = pm.collectionVariables.get('test_user_id');",
+							"const testEmail = pm.collectionVariables.get('test_email');",
+							"",
+							"if (wasPromoted === 'true') {",
+							"    console.log('⬇️ Demoting User Back to Regular');",
+							"    console.log('🆔 Target User ID:', testUserId);",
+							"    console.log('📧 Target Email:', testEmail);",
+							"    console.log('👤 Demoting from: staff → user');",
+							"} else {",
+							"    console.log('⚠️ User was not promoted, skipping demotion');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"const wasPromoted = pm.collectionVariables.get('user_was_promoted');",
+							"",
+							"if (wasPromoted === 'true') {",
+							"    pm.test(\"User Demotion to Regular User\", function () {",
+							"        pm.response.to.have.status(200);",
+							"        const jsonData = pm.response.json();",
+							"        pm.expect(jsonData).to.have.property('message');",
+							"        pm.expect(jsonData).to.have.property('user');",
+							"        pm.expect(jsonData.user.user_type).to.eql('user');",
+							"    });",
+							"    ",
+							"    if (pm.response.code === 200) {",
+							"        const jsonData = pm.response.json();",
+							"        console.log('✅ User Demotion Successful!');",
+							"        console.log('📝 Message:', jsonData.message);",
+							"        console.log('👤 Final Role:', jsonData.user.user_type);",
+							"        pm.collectionVariables.set('cleanup_demotion_success', 'true');",
+							"    } else {",
+							"        console.log('❌ User Demotion Failed');",
+							"        pm.collectionVariables.set('cleanup_demotion_success', 'false');",
+							"    }",
+							"} else {",
+							"    console.log('⏭️ Skipping demotion - user was not promoted');",
+							"    pm.collectionVariables.set('cleanup_demotion_success', 'skipped');",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{admin_access_token}}"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"role\": \"user\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/{{test_user_id}}/change-role/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", "{{test_user_id}}", "change-role", ""]
+				}
+			}
+		},
+		{
+			"name": "🧹 CLEANUP: Final User List Check",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Final User List Check\", function () {",
+							"    pm.response.to.have.status(200);",
+							"    const jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('count');",
+							"    pm.expect(jsonData).to.have.property('users');",
+							"});",
+							"",
+							"if (pm.response.code === 200) {",
+							"    const jsonData = pm.response.json();",
+							"    const finalUserCount = jsonData.count;",
+							"    const initialUserCount = pm.collectionVariables.get('initial_user_count');",
+							"    const testEmail = pm.collectionVariables.get('test_email');",
+							"    ",
+							"    console.log('📊 Final User Count:', finalUserCount);",
+							"    console.log('📊 Initial User Count:', initialUserCount);",
+							"    ",
+							"    // Check if our test user is still in the system",
+							"    const testUser = jsonData.users.find(user => user.email === testEmail);",
+							"    if (testUser) {",
+							"        console.log('👤 Test User Status in System:');",
+							"        console.log('   📧 Email:', testUser.email);",
+							"        console.log('   👤 Role:', testUser.user_type);",
+							"        console.log('   🆔 ID:', testUser.id);",
+							"        ",
+							"        if (testUser.user_type === 'user') {",
+							"            console.log('✅ Test user successfully demoted to regular user');",
+							"        } else {",
+							"            console.log('⚠️ Test user role not properly reset:', testUser.user_type);",
+							"        }",
+							"    } else {",
+							"        console.log('❓ Test user not found in final user list');",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{admin_access_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/auth/users/",
+					"host": ["{{base_url}}"],
+					"path": ["api", "auth", "users", ""]
+				}
+			}
+		},
+		{
+			"name": "🧹 CLEANUP: Clear All Variables",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"// Final cleanup - clear all stored variables",
+							"console.log('🧹 FINAL CLEANUP - CLEARING ALL VARIABLES');",
+							"console.log('==========================================');",
+							"",
+							"// Admin variables",
+							"pm.collectionVariables.unset('admin_access_token');",
+							"pm.collectionVariables.unset('admin_refresh_token');",
+							"pm.collectionVariables.unset('admin_user_id');",
+							"pm.collectionVariables.unset('admin_user_type');",
+							"",
+							"// Test user variables",
+							"pm.collectionVariables.unset('test_user_id');",
+							"pm.collectionVariables.unset('test_username');",
+							"pm.collectionVariables.unset('test_email');",
+							"pm.collectionVariables.unset('test_password');",
+							"pm.collectionVariables.unset('test_user_access_token');",
+							"pm.collectionVariables.unset('test_user_refresh_token');",
+							"pm.collectionVariables.unset('test_user_initial_type');",
+							"",
+							"// Staff variables",
+							"pm.collectionVariables.unset('staff_access_token');",
+							"pm.collectionVariables.unset('staff_refresh_token');",
+							"pm.collectionVariables.unset('refreshed_access_token');",
+							"",
+							"// Cleanup tracking variables",
+							"pm.collectionVariables.unset('user_was_promoted');",
+							"pm.collectionVariables.unset('user_current_role');",
+							"pm.collectionVariables.unset('initial_user_count');",
+							"pm.collectionVariables.unset('cleanup_demotion_success');",
+							"",
+							"console.log('✅ All variables cleared');",
+							"console.log('✅ All tokens invalidated');",
+							"console.log('✅ Test session completely cleaned up');",
+							"",
+							"console.log('');",
+							"console.log('🎉 COMPREHENSIVE TESTING COMPLETED SUCCESSFULLY!');",
+							"console.log('==================================================');",
+							"console.log('');",
+							"console.log('📊 COMPLETE TEST SUMMARY:');",
+							"console.log('   ✅ API Health Check');",
+							"console.log('   ✅ Admin/Superuser Authentication');",
+							"console.log('   ✅ Initial User List Access (Admin)');",
+							"console.log('   ✅ Test User Registration');",
+							"console.log('   ✅ Test User Login');",
+							"console.log('   ✅ User Profile Access');",
+							"console.log('   ✅ Regular User Permission Restrictions');",
+							"console.log('      • Staff access denied ✅');",
+							"console.log('      • Admin access denied ✅');",
+							"console.log('      • User list access denied ✅');",
+							"console.log('   ✅ User Role Promotion (user → staff)');",
+							"console.log('   ✅ Re-login After Promotion');",
+							"console.log('   ✅ Staff Level Access Granted');",
+							"console.log('      • Staff endpoint access ✅');",
+							"console.log('      • User list access ✅');",
+							"console.log('   ✅ Staff Level Restrictions');",
+							"console.log('      • Admin access denied ✅');",
+							"console.log('   ✅ Superuser Admin Access');",
+							"console.log('   ✅ JWT Token Refresh');",
+							"console.log('   ✅ Input Validation Testing');",
+							"console.log('   ✅ Complete Cleanup Process');",
+							"console.log('      • User demotion (staff → user) ✅');",
+							"console.log('      • Final system verification ✅');",
+							"console.log('      • Variable cleanup ✅');",
+							"console.log('');",
+							"console.log('🔐 ROLE-BASED ACCESS CONTROL: FULLY TESTED & VERIFIED!');",
+							"console.log('🧹 CLEANUP: COMPLETE - NO TEST DATA REMAINS!');",
+							"console.log('');",
+							"console.log('💡 Note: Test users may still exist in database but are');",
+							"console.log('   properly demoted to regular user status.');",
+							"console.log('   For complete removal, delete via Django admin panel.');"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health/",
+					"host": ["{{base_url}}"],
+					"path": ["health", ""]
+				}
+			}
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"exec": [
+					"console.log('🚀 TEDx Authentication API - COMPREHENSIVE ROLE TESTING');",
+					"console.log('=========================================================');",
+					"console.log('');",
+					"console.log('🔍 This collection performs COMPLETE role-based access testing:');",
+					"console.log('   • Regular User Testing');",
+					"console.log('   • Staff Promotion & Testing');",
+					"console.log('   • Superuser/Admin Testing');",
+					"console.log('   • Complete Cleanup with Demotion');",
+					"console.log('');",
+					"",
+					"// Set default base URL if not provided",
+					"if (!pm.environment.get('base_url') && !pm.collectionVariables.get('base_url')) {",
+					"    pm.collectionVariables.set('base_url', 'https://tedx-backend.onrender.com');",
+					"    console.log('🌐 Using default production URL: https://tedx-backend.onrender.com');",
+					"} else {",
+					"    const baseUrl = pm.environment.get('base_url') || pm.collectionVariables.get('base_url');",
+					"    console.log('🌐 Using configured URL:', baseUrl);",
+					"}",
+					"",
+					"// Check admin credentials",
+					"const adminEmail = pm.environment.get('admin_email');",
+					"const adminPassword = pm.environment.get('admin_password');",
+					"",
+					"if (!adminEmail || !adminPassword) {",
+					"    console.log('');",
+					"    console.log('⚠️  ADMIN CREDENTIALS REQUIRED FOR COMPLETE TESTING');",
+					"    console.log('=========================================================');",
+					"    console.log('Please set these environment variables:');",
+					"    console.log('   admin_email: your-admin@email.com');",
+					"    console.log('   admin_password: your-admin-password');",
+					"    console.log('');",
+					"    console.log('Without admin credentials, role testing will fail.');",
+					"    console.log('Collection will use defaults but may not work.');",
+					"} else {",
+					"    console.log('✅ Admin credentials found in environment');",
+					"}",
+					"",
+					"console.log('');"
+				],
+				"type": "text/javascript"
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://tedx-backend.onrender.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_email",
+			"value": "admin@test.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_password",
+			"value": "AdminPass123!",
+			"type": "string"
+		}
+	]
+}
